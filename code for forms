@@ -1,0 +1,105 @@
+const webhooks = [""];
+
+const title = "", avatarImage = "", shortDescription = "", colour = "", mention = "<@!>", type = "";
+
+const bonusFeatures = {
+  convert2Link: 'ON',
+  convert2Mention: 'ON'
+}
+
+const form = FormApp.getActiveForm(), allResponses = form.getResponses(), latestResponse = allResponses[allResponses.length - 1];
+let response;
+var items = [];
+let embedImageUrl = null;
+
+try {
+  response = latestResponse.getItemResponses()
+} catch (error) {
+  throw "No Responses found in your form."
+}
+
+for (const hook of webhooks) {
+  if (!/^(?:https?:\/\/)?(?:www\.)?(?:(?:canary|ptb)\.)?discord(?:app)?\.com\/api\/webhooks\/\d+\/[\w-+]+$/i.test(hook)) throw `Webhook ${i + 1 || 1} is not valid.`;
+}
+
+if (avatarImage && !/\.(jpeg|jpg|gif|png)$/.test(avatarImage)) throw "Image URL is not a direct link";
+
+for (var i = 0; i < response.length; i++) {
+  const question = response[i].getItem().getTitle(), answer = response[i].getResponse();
+  if (answer == "") continue;
+  items.push({ "name": question, "value": answer });
+}
+
+function data(item) {
+  const linkValidate = /(?:(?:https?|http?):\/\/)(?:\([-A-Z0-9+&@#\/%=~_|$?!:,.]*\)|[-A-Z0-9+&@#\/%=~_|$?!:,.])*(?:\([-A-Z0-9+&@#\/%=~_|$?!:,.]*\)|[A-Z0-9+&@#\/%=~_|$])/i;
+  const markdownLinkValidate = /^\[.*\]\(.*\)$/;
+  const driveIdValidate = /^[a-zA-Z0-9_-]{25,}$/;
+
+  if (bonusFeatures.convert2Mention == 'ON' && !isNaN(item.value) && item.value.length == 18) {
+    item.value = `<@!${item.value}>`;
+  }
+
+  if (driveIdValidate.test(item.value)) {
+    const driveLink = `https://drive.google.com/uc?export=view&id=${item.value}`;
+    item.value = `[Clique aqui para ver a imagem](${driveLink})`;
+    if (!embedImageUrl) embedImageUrl = driveLink;
+  }
+  else if (linkValidate.test(item.value) && /\.(jpeg|jpg|gif|png|webp)$/i.test(item.value)) {
+    if (!markdownLinkValidate.test(item.value)) {
+      item.value = `[${item.value}](${item.value})`;
+    }
+    if (!embedImageUrl) embedImageUrl = item.value.match(/\((.*?)\)/)[1];
+  }
+  else if (bonusFeatures.convert2Link == 'ON' && type.toLowerCase() !== 'text') {
+    if (!markdownLinkValidate.test(item.value) && linkValidate.test(item.value)) {
+      item.value = `[${item.value}](${item.value})`;
+    }
+  }
+  else {
+    if (bonusFeatures.convert2Link == 'ON' && linkValidate.test(item.value)) {
+      item.value = `<${item.value}>`;
+    }
+  }
+
+  return [`**${item.name}**`, `${item.value}`].join("\n");
+}
+
+if (items.map(data).toString().length + shortDescription.length > 1999) throw "Discord limit reached. Please add limits to your questions!";
+
+function plainText(e) {
+  const text = {
+    "method": "post",
+    "headers": { "Content-Type": "application/json" },
+    "muteHttpExceptions": true,
+    "payload": JSON.stringify({
+      "content": `${mention ? mention : ''}${title ? `**${title}**` : `**${form.getTitle()}**`}\n\n${shortDescription ? `${shortDescription}\n\n${items.map(data).join('\n\n')}` : items.map(data).join('\n\n')}`
+    }),
+  };
+
+  for (var i = 0; i < webhooks.length; i++) {
+    UrlFetchApp.fetch(webhooks[i], text);
+  }
+}
+
+function embedText(e) {
+  const embed = {
+    "method": "post",
+    "headers": { "Content-Type": "application/json" },
+    "muteHttpExceptions": true,
+    "payload": JSON.stringify({
+      "content": mention ? mention : '',
+      "embeds": [{
+        "title": title ? title : form.getTitle(),
+        "description": shortDescription ? `${shortDescription}\n\n${items.map(data).join('\n\n')}` : items.map(data).join('\n\n'),
+        "thumbnail": { "url": avatarImage ? encodeURI(avatarImage) : null },
+        "color": colour ? parseInt(colour.substr(1), 16) : Math.floor(Math.random() * 16777215),
+        "timestamp": new Date().toISOString(),
+        "image": { "url": embedImageUrl ? embedImageUrl : null }
+      }]
+    }),
+  };
+
+  for (var i = 0; i < webhooks.length; i++) {
+    UrlFetchApp.fetch(webhooks[i], embed);
+  }
+}
